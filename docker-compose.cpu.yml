@@ -1,0 +1,82 @@
+# Decentralized veRL Docker Compose - CPU Only
+#
+# This file sets up a demo environment for CPU-only testing.
+# Good for development and testing without GPU access.
+#
+# Usage:
+#   docker-compose -f docker-compose.cpu.yml up -d
+#   docker-compose -f docker-compose.cpu.yml logs -f
+#   docker-compose -f docker-compose.cpu.yml down
+
+version: '3.8'
+
+services:
+  # DHT Bootstrap Node
+  dht-bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+    container_name: dverl-dht-cpu
+    command: >
+      python -m decentralized_verl.cli.run_dht
+      --port 31337
+      --announce-host dht-bootstrap
+    ports:
+      - "31337:31337"
+    networks:
+      - dverl-cpu-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 31337)); s.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Hybrid Worker (combines actor, critic, reward, reference)
+  hybrid-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+    container_name: dverl-hybrid-cpu
+    command: >
+      python -m decentralized_verl.cli.run_worker
+      --initial-peers /dns4/dht-bootstrap/tcp/31337
+      --model gpt2
+      --role hybrid
+      --port 31338
+      --backend huggingface
+    ports:
+      - "31338:31338"
+    networks:
+      - dverl-cpu-network
+    depends_on:
+      dht-bootstrap:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Training Coordinator
+  coordinator:
+    build:
+      context: .
+      dockerfile: Dockerfile.cpu
+    container_name: dverl-coordinator-cpu
+    command: >
+      python -m decentralized_verl.cli.run_training
+      --initial-peers /dns4/dht-bootstrap/tcp/31337
+      --model gpt2
+      --algorithm ppo
+      --num-epochs 10
+      --batch-size 2
+      --output-dir /app/outputs
+    volumes:
+      - ./outputs:/app/outputs
+    networks:
+      - dverl-cpu-network
+    depends_on:
+      - dht-bootstrap
+      - hybrid-worker
+    restart: unless-stopped
+
+networks:
+  dverl-cpu-network:
+    driver: bridge

@@ -1,0 +1,49 @@
+# Decentralized veRL Docker Image - CPU Only
+# Lightweight image for development and testing
+
+FROM python:3.10-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy project files
+WORKDIR /app
+COPY pyproject.toml README.md ./
+COPY decentralized_verl/ ./decentralized_verl/
+
+# Install dependencies (CPU-only PyTorch)
+RUN pip install --upgrade pip setuptools wheel \
+    && pip install torch --index-url https://download.pytorch.org/whl/cpu \
+    && pip install -e ".[dev]"
+
+# Copy examples and tests
+COPY examples/ ./examples/
+COPY tests/ ./tests/
+
+# Create non-root user
+RUN useradd -m -u 1000 dverl \
+    && chown -R dverl:dverl /app
+USER dverl
+
+# Default port for DHT
+EXPOSE 31337
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD python -c "import decentralized_verl; print('ok')" || exit 1
+
+# Default command
+CMD ["python", "-m", "decentralized_verl.cli.run_dht", "--help"]

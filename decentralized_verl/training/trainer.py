@@ -664,6 +664,9 @@ class DecentralizedTrainer:
         """Save training checkpoint."""
         checkpoint_path = Path(self.config.checkpoint_dir) / name
 
+        # Create checkpoint directory
+        checkpoint_path.mkdir(parents=True, exist_ok=True)
+
         # Save model
         torch.save(
             self.actor_model.state_dict(),

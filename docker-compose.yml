@@ -1,0 +1,176 @@
+# Decentralized veRL Docker Compose Configuration
+#
+# This file sets up a demo environment with:
+# - 1 DHT bootstrap node
+# - 2 Actor workers
+# - 1 Critic worker
+# - 1 Training coordinator
+#
+# Usage:
+#   docker-compose up -d                    # Start all services
+#   docker-compose logs -f                  # Follow logs
+#   docker-compose down                     # Stop all services
+#   docker-compose up -d --scale actor=4    # Scale actors
+
+version: '3.8'
+
+services:
+  # DHT Bootstrap Node
+  dht-bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dverl-dht-bootstrap
+    command: >
+      python -m decentralized_verl.cli.run_dht
+      --port 31337
+      --announce-host dht-bootstrap
+    ports:
+      - "31337:31337"
+    networks:
+      - dverl-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 31337)); s.close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Actor Worker 1
+  actor-1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dverl-actor-1
+    command: >
+      python -m decentralized_verl.cli.run_worker
+      --initial-peers /dns4/dht-bootstrap/tcp/31337
+      --model gpt2
+      --role actor
+      --port 31338
+      --backend huggingface
+    ports:
+      - "31338:31338"
+    networks:
+      - dverl-network
+    depends_on:
+      dht-bootstrap:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    restart: unless-stopped
+
+  # Actor Worker 2
+  actor-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dverl-actor-2
+    command: >
+      python -m decentralized_verl.cli.run_worker
+      --initial-peers /dns4/dht-bootstrap/tcp/31337
+      --model gpt2
+      --role actor
+      --port 31339
+      --backend huggingface
+    ports:
+      - "31339:31339"
+    networks:
+      - dverl-network
+    depends_on:
+      dht-bootstrap:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - CUDA_VISIBLE_DEVICES=1
+    restart: unless-stopped
+
+  # Critic Worker
+  critic:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dverl-critic
+    command: >
+      python -m decentralized_verl.cli.run_worker
+      --initial-peers /dns4/dht-bootstrap/tcp/31337
+      --model gpt2
+      --role critic
+      --port 31340
+      --backend huggingface
+    ports:
+      - "31340:31340"
+    networks:
+      - dverl-network
+    depends_on:
+      dht-bootstrap:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - CUDA_VISIBLE_DEVICES=2
+    restart: unless-stopped
+
+  # Training Coordinator
+  coordinator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dverl-coordinator
+    command: >
+      python -m decentralized_verl.cli.run_training
+      --initial-peers /dns4/dht-bootstrap/tcp/31337
+      --model gpt2
+      --algorithm ppo
+      --num-epochs 100
+      --batch-size 4
+      --output-dir /app/outputs
+    volumes:
+      - ./outputs:/app/outputs
+      - ./prompts.json:/app/prompts.json:ro
+    networks:
+      - dverl-network
+    depends_on:
+      - dht-bootstrap
+      - actor-1
+      - actor-2
+      - critic
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    environment:
+      - CUDA_VISIBLE_DEVICES=3
+    restart: unless-stopped
+
+networks:
+  dverl-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# Volume for persistent outputs
+volumes:
+  dverl-outputs:

@@ -343,10 +343,95 @@ class DHTManager:
                 time.sleep(1)
 
     def _poll_messages(self) -> None:
-        """Poll DHT for new messages."""
-        # In a production system, this would use Hivemind's pubsub or
-        # direct RPC capabilities. Here we simulate with DHT polling.
-        pass
+        """Poll DHT for new messages addressed to this node."""
+        if not self.dht:
+            return
+
+        # Track processed messages to avoid duplicates
+        if not hasattr(self, '_processed_messages'):
+            self._processed_messages: set = set()
+
+        try:
+            # Poll for messages addressed to this node
+            # Message keys follow pattern: dverl:message:{peer_id}:{message_id}
+            prefix = f"{DHT_PREFIX_MESSAGE}{self.node_id}:"
+
+            # Get messages from known senders
+            with self._lock:
+                peer_ids = list(self._peer_cache.keys())
+
+            for sender_id in peer_ids:
+                if sender_id == self.node_id:
+                    continue
+
+                # Try to get recent messages from this sender
+                # We scan for messages using a pattern
+                for msg_suffix in range(100):  # Check recent message slots
+                    key = f"{prefix}{sender_id}_{msg_suffix}"
+                    try:
+                        result = self.dht.get(key)
+                        if result and result.value:
+                            # Check if already processed
+                            if key in self._processed_messages:
+                                continue
+
+                            dht_value = pickle.loads(result.value)
+                            if dht_value.is_expired():
+                                continue
+
+                            # Unframe and deserialize message
+                            framed_data = dht_value.data
+                            if isinstance(framed_data, bytes):
+                                try:
+                                    msg_data, _ = unframe_message(framed_data)
+                                    message = Message.deserialize(msg_data)
+
+                                    # Add to queue
+                                    self._message_queue.put(message)
+                                    self._processed_messages.add(key)
+
+                                    logger.debug(f"Received message {message.message_id} from {sender_id}")
+                                except Exception as e:
+                                    logger.debug(f"Failed to parse message: {e}")
+
+                    except Exception as e:
+                        # Key doesn't exist or other error, continue
+                        pass
+
+            # Also check broadcast messages
+            self._poll_broadcast_messages()
+
+            # Cleanup old processed message IDs (keep last 10000)
+            if len(self._processed_messages) > 10000:
+                # Convert to list, sort, keep recent
+                self._processed_messages = set(list(self._processed_messages)[-5000:])
+
+        except Exception as e:
+            logger.debug(f"Error polling messages: {e}")
+
+    def _poll_broadcast_messages(self) -> None:
+        """Poll for broadcast messages."""
+        if not self.dht:
+            return
+
+        if not hasattr(self, '_processed_broadcasts'):
+            self._processed_broadcasts: set = set()
+
+        try:
+            # Check for broadcast messages from known peers
+            with self._lock:
+                peer_ids = list(self._peer_cache.keys())
+
+            for sender_id in peer_ids:
+                if sender_id == self.node_id:
+                    continue
+
+                # Broadcast messages use pattern: dverl:message:{message_id}
+                # We need to discover these through peer announcements
+                # For now, check the gossip state for new broadcasts
+
+        except Exception as e:
+            logger.debug(f"Error polling broadcasts: {e}")
 
     # Gradient averaging methods for distributed training
 
