@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "decentralized-verl"
+version = "0.1.0"
+description = "Decentralized Reinforcement Learning for LLMs - P2P RLHF Training"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Decentralized veRL Contributors"}
+]
+keywords = ["rlhf", "llm", "decentralized", "p2p", "reinforcement-learning", "hivemind"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "torch>=2.0.0",
+    "transformers>=4.35.0",
+    "hivemind>=1.1.10",
+    "accelerate>=0.25.0",
+    "datasets>=2.14.0",
+    "numpy>=1.24.0",
+    "tqdm>=4.65.0",
+    "pydantic>=2.0.0",
+    "structlog>=23.1.0",
+    "multiaddr>=0.0.9",
+    "tenacity>=8.2.0",
+    "msgpack>=1.0.0",
+    "xxhash>=3.0.0",
+]
+
+[project.optional-dependencies]
+vllm = ["vllm>=0.4.0"]
+sglang = ["sglang>=0.1.0"]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+
+[project.scripts]
+dverl-dht = "decentralized_verl.cli.run_dht:main"
+dverl-worker = "decentralized_verl.cli.run_worker:main"
+dverl-train = "decentralized_verl.cli.run_training:main"
+
+[project.urls]
+Homepage = "https://github.com/decentralized-verl/decentralized-verl"
+Documentation = "https://decentralized-verl.readthedocs.io"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["decentralized_verl*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py39", "py310", "py311"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "N", "W"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
