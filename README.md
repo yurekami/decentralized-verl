@@ -297,7 +297,7 @@ If you use Decentralized veRL in your research, please cite:
 ```bibtex
 @software{decentralized_verl,
   title = {Decentralized veRL: P2P RLHF Training for LLMs},
-  year = {2024},
+  year = {2025},
   url = {https://github.com/decentralized-verl/decentralized-verl}
 }
 ```
